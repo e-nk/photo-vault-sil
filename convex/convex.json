@@ -1,0 +1,26 @@
+{
+  "functions": {
+    "codegen": {
+      "provider": "customJsTs",
+      "functionImports": "import type * as types from \"./types\";",
+      "functionDataModel": "import type { DataModel } from \"./_generated/dataModel\";",
+      "path": "./types.ts"
+    }
+  },
+  "storage": {
+    "mode": "inTable",
+    "tables": {
+      "photos": {
+        "fieldPath": "storageId"
+      }
+    }
+  },
+  "auth": {
+    "providers": {
+      "clerk": {
+        "domain": "environment variable",
+        "applicationID": "environment variable"
+      }
+    }
+  }
+}
