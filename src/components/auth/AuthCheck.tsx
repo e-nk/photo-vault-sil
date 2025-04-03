@@ -1,34 +1,40 @@
 'use client';
 
-import { useAuth } from '@clerk/nextjs';
+import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 export default function AuthCheck({ children }: { children: React.ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      // Redirect to home if not signed in
+    // Redirect to home if not signed in
+    if (!isLoading && !isAuthenticated) {
       router.push('/');
     }
-  }, [isLoaded, isSignedIn, router]);
 
-  // Show nothing while loading
-  if (!isLoaded) {
+    // If authenticated but no user profile in Convex yet, wait for sync
+    if (!isLoading && isAuthenticated && !user) {
+      // User is authenticated but profile not in Convex yet
+      // This will automatically trigger the sync in the useAuth hook
+    }
+  }, [isLoading, isAuthenticated, router, user]);
+
+  // Show loading spinner while checking auth or syncing user
+  if (isLoading || (isAuthenticated && !user)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-text-secondary">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-photo-primary">
+        <div className="w-16 h-16 rounded-full border-4 border-photo-indigo/30 border-t-transparent animate-spin"></div>
       </div>
     );
   }
 
   // Show nothing if not signed in (will redirect)
-  if (!isSignedIn) {
+  if (!isAuthenticated) {
     return null;
   }
 
-  // Show children if authenticated
+  // Show children if authenticated and user exists in Convex
   return <>{children}</>;
 }

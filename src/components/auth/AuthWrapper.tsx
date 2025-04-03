@@ -1,44 +1,52 @@
-// File path: /components/auth/AuthWrapper.tsx
-
 'use client';
 
-import { useAuth } from '@clerk/nextjs';
-import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, ReactNode } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 
 // List of paths that don't require authentication
 const publicPaths = ['/', '/sign-in', '/sign-up'];
 
 interface AuthWrapperProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 export function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isLoaded, userId } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
   const isPublicPath = publicPaths.includes(pathname);
 
   useEffect(() => {
-    if (isLoaded) {
+    if (!isLoading) {
       // If user is not signed in and the route requires authentication
-      if (!userId && !isPublicPath) {
+      if (!isAuthenticated && !isPublicPath) {
         router.push('/sign-in');
       }
       
       // If user is signed in and trying to access auth pages
-      if (userId && (pathname === '/sign-in' || pathname === '/sign-up')) {
+      if (isAuthenticated && (pathname === '/sign-in' || pathname === '/sign-up')) {
         router.push('/home');
       }
     }
-  }, [isLoaded, userId, router, pathname, isPublicPath]);
+  }, [isLoading, isAuthenticated, router, pathname, isPublicPath]);
 
-  // Show loading state while Clerk is loading
-  if (!isLoaded) {
+  // Show loading state while Clerk/Convex is loading
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-photo-primary">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-photo-indigo"></div>
+      </div>
+    );
+  }
+
+  // If authenticated but waiting for user profile to sync
+  if (isAuthenticated && !user && !isPublicPath) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-photo-primary">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-photo-indigo"></div>
+        <p className="ml-3 text-photo-secondary">Setting up your profile...</p>
       </div>
     );
   }
