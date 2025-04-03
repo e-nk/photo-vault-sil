@@ -37,7 +37,7 @@ export default defineSchema({
     // Album stats
     photoCount: v.number(),
     // Album cover image (typically the first photo or a selected one)
-    coverImage: v.optional(v.string()),
+    coverImage: v.optional(v.string()),  // FIXED: Changed from required to optional
     // Timestamps
     dateCreated: v.string(),
     dateUpdated: v.string(),

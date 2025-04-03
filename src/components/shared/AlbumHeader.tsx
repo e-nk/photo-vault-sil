@@ -1,9 +1,6 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Album } from '@/data/dummy-albums';
-import { MyAlbum } from '@/data/my-albums';
-import { User } from '@/data/dummy-users';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -33,14 +30,27 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from "@/components/ui/label";
 import { Switch } from '@/components/ui/switch';
+import { Id } from '@/convex/_generated/dataModel';
 
 interface AlbumHeaderProps {
-  album: Album | MyAlbum;
-  user: User;
+  album: {
+    _id: Id<"albums">;
+    title: string;
+    description?: string;
+    isPrivate: boolean;
+    dateCreated: string;
+    dateUpdated: string;
+  };
+  user: {
+    _id: Id<"users">;
+    name: string;
+    username: string;
+    avatar?: string;
+  };
   totalPhotos: number;
   isOwner?: boolean;
   backUrl?: string;
-  onUpdate?: (updates: Partial<MyAlbum>) => void;
+  onUpdate?: (updates: Partial<typeof album>) => void;
   onDelete?: () => void;
   onUpload?: () => void;
 }
@@ -58,22 +68,13 @@ export function AlbumHeader({
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [editedTitle, setEditedTitle] = useState(album.title);
-  const [editedDescription, setEditedDescription] = useState(
-    'description' in album ? album.description || '' : ''
-  );
-  const [editedPrivate, setEditedPrivate] = useState(
-    'isPrivate' in album ? album.isPrivate : false
-  );
+  const [editedDescription, setEditedDescription] = useState(album.description || '');
+  const [editedPrivate, setEditedPrivate] = useState(album.isPrivate);
   
   const formattedDate = formatDistanceToNow(
-    new Date('dateUpdated' in album && album.dateUpdated 
-      ? album.dateUpdated 
-      : album.dateCreated
-    ), 
+    new Date(album.dateUpdated || album.dateCreated), 
     { addSuffix: true }
   );
-  
-  const isPrivate = 'isPrivate' in album ? album.isPrivate : false;
   
   const handleSaveEdit = () => {
     if (!editedTitle.trim() || !onUpdate) return;
@@ -106,18 +107,16 @@ export function AlbumHeader({
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
               <h1 className="text-3xl font-bold text-photo-secondary">{album.title}</h1>
-              {('isPrivate' in album) && (
-                isPrivate ? (
-                  <Badge variant="outline" className="gap-1 border-photo-border bg-photo-darkgray/30">
-                    <Lock className="h-3 w-3 mr-1" />
-                    Private
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="gap-1 border-photo-border bg-photo-darkgray/30">
-                    <Globe className="h-3 w-3 mr-1" />
-                    Public
-                  </Badge>
-                )
+              {album.isPrivate ? (
+                <Badge variant="outline" className="gap-1 border-photo-border bg-photo-darkgray/30">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Private
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="gap-1 border-photo-border bg-photo-darkgray/30">
+                  <Globe className="h-3 w-3 mr-1" />
+                  Public
+                </Badge>
               )}
             </div>
             
@@ -192,7 +191,7 @@ export function AlbumHeader({
             </div>
           </div>
           
-          {('description' in album && album.description) && (
+          {album.description && (
             <p className="text-photo-secondary/80 max-w-3xl mb-6">
               {album.description}
             </p>
@@ -200,8 +199,8 @@ export function AlbumHeader({
           
           <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 items-start sm:items-center">
             <div className="flex items-center">
-              <Link href={`/user/${user.id}`}>
-                <Avatar className="h-10 w-10 mr-3 border border-photo-border">
+              <Link href={`/user/${user._id}`}>
+                <Avatar className="h-10 w-10 mr-3 border border-photo-border/30">
                   <AvatarImage src={user.avatar} alt={user.name} />
                   <AvatarFallback className="bg-photo-indigo/20 text-photo-secondary">
                     {user.name.substring(0, 2).toUpperCase()}
@@ -209,7 +208,7 @@ export function AlbumHeader({
                 </Avatar>
               </Link>
               <div>
-                <Link href={`/user/${user.id}`} className="text-photo-secondary hover:text-photo-indigo transition-colors font-medium">
+                <Link href={`/user/${user._id}`} className="text-photo-secondary hover:text-photo-indigo transition-colors font-medium">
                   {user.name}
                 </Link>
                 <p className="text-photo-secondary/60 text-xs">@{user.username}</p>

@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState } from 'react';
-import { MyAlbum } from '@/data/my-albums';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { 
-  Calendar, Image, Lock, MoreHorizontal, Edit, Trash2, PlusSquare, Share2
+  Calendar, Image, Lock, MoreHorizontal, Edit, Trash2, PlusSquare, Share2, Globe
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -31,12 +30,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useRouter } from 'next/navigation';
+import { Id } from '@/convex/_generated/dataModel';
 
 interface MyAlbumCardProps {
-  album: MyAlbum;
-  onUpdate: (albumId: number, updates: Partial<MyAlbum>) => void;
-  onDelete: (albumId: number) => void;
-  onAddPhotos: (albumId: number) => void;
+  album: {
+    _id: Id<"albums">;
+    title: string;
+    description?: string;
+    isPrivate: boolean;
+    photoCount: number;
+    coverImage?: string;
+    dateCreated: string;
+    dateUpdated: string;
+  };
+  onUpdate: (albumId: Id<"albums">, updates: Partial<typeof album>) => void;
+  onDelete: (albumId: Id<"albums">) => void;
+  onAddPhotos: (albumId: Id<"albums">) => void;
 }
 
 export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumCardProps) {
@@ -51,7 +60,7 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
   
   const handleSaveEdit = () => {
     if (editedTitle.trim()) {
-      onUpdate(album.id, {
+      onUpdate(album._id, {
         title: editedTitle.trim(),
         description: editedDescription.trim() || undefined,
         isPrivate: editedPrivate
@@ -61,13 +70,16 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
   };
   
   const handleConfirmDelete = () => {
-    onDelete(album.id);
+    onDelete(album._id);
     setIsDeleteDialogOpen(false);
   };
   
   const navigateToAlbum = () => {
-    router.push(`/album/${album.id}`);
+    router.push(`/album/${album._id}`);
   };
+
+  // Use placeholder if no cover image is available
+  const coverImageUrl = album.coverImage || `/api/placeholder/400/300?text=${encodeURIComponent(album.title)}`;
 
   return (
     <>
@@ -79,17 +91,22 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
         >
           <div className="pb-[65%] relative">
             <img 
-              src={album.coverImage} 
+              src={coverImageUrl} 
               alt={album.title}
               className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
             />
           </div>
           
           {/* Privacy badge */}
-          {album.isPrivate && (
+          {album.isPrivate ? (
             <Badge variant="secondary" className="absolute top-3 left-3 bg-black/60 text-white border-0 gap-1 backdrop-blur-sm">
               <Lock className="h-3 w-3 mr-1" />
               Private
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="absolute top-3 left-3 bg-black/60 text-white border-0 gap-1 backdrop-blur-sm">
+              <Globe className="h-3 w-3 mr-1" />
+              Public
             </Badge>
           )}
           
@@ -113,7 +130,7 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
                 className="h-8 w-8 rounded-full bg-black/30 backdrop-blur-sm hover:bg-black/50 text-white"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddPhotos(album.id);
+                  onAddPhotos(album._id);
                 }}
               >
                 <PlusSquare className="h-4 w-4" />
@@ -146,11 +163,11 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => router.push(`/my-albums/${album.id}`)}>
+                <DropdownMenuItem onClick={() => router.push(`/album/${album._id}`)}>
                   <Image className="h-4 w-4 mr-2" />
                   View album
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onAddPhotos(album.id)}>
+                <DropdownMenuItem onClick={() => onAddPhotos(album._id)}>
                   <PlusSquare className="h-4 w-4 mr-2" />
                   Add photos
                 </DropdownMenuItem>
@@ -180,7 +197,7 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
         <CardFooter className="p-4 pt-0 flex items-center text-xs text-photo-secondary/50">
           <div className="flex items-center mr-4">
             <Image className="h-3 w-3 mr-1" />
-            <span>{album.photoCount} photos</span>
+            <span>{album.photoCount} photo{album.photoCount !== 1 ? 's' : ''}</span>
           </div>
           <div className="flex items-center">
             <Calendar className="h-3 w-3 mr-1" />
@@ -255,7 +272,7 @@ export function MyAlbumCard({ album, onUpdate, onDelete, onAddPhotos }: MyAlbumC
               Album: <span className="font-medium">{album.title}</span>
             </p>
             <p className="text-photo-secondary/70 text-sm mt-2">
-              This will permanently delete the album and all of its contents.
+              This will permanently delete the album and all of its contents ({album.photoCount} photos).
             </p>
           </div>
           <DialogFooter>

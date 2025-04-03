@@ -1,17 +1,28 @@
 import React from 'react';
-import { MyAlbum } from '@/data/my-albums';
 import { MyAlbumCard } from '@/components/my-albums/MyAlbumCard';
 import { Button } from '@/components/ui/button';
 import { FolderPlus } from 'lucide-react';
+import { Id } from '@/convex/_generated/dataModel';
+
+interface Album {
+  _id: Id<"albums">;
+  title: string;
+  description?: string;
+  isPrivate: boolean;
+  photoCount: number;
+  coverImage?: string;
+  dateCreated: string;
+  dateUpdated: string;
+}
 
 interface MyAlbumsGridProps {
-  albums: MyAlbum[];
+  albums: Album[];
   isLoading?: boolean;
   searchTerm: string;
   onCreateAlbum: () => void;
-  onUpdateAlbum: (albumId: number, updates: Partial<MyAlbum>) => void;
-  onDeleteAlbum: (albumId: number) => void;
-  onAddPhotos: (albumId: number) => void;
+  onUpdateAlbum: (albumId: Id<"albums">, updates: Partial<Album>) => void;
+  onDeleteAlbum: (albumId: Id<"albums">) => void;
+  onAddPhotos: (albumId: Id<"albums">) => void;
 }
 
 export function MyAlbumsGrid({
@@ -69,7 +80,7 @@ export function MyAlbumsGrid({
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {albums.map(album => (
         <MyAlbumCard
-          key={album.id}
+          key={album._id}
           album={album}
           onUpdate={onUpdateAlbum}
           onDelete={onDeleteAlbum}

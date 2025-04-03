@@ -47,12 +47,20 @@ export function MyAlbumsHeader({
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [newAlbumDescription, setNewAlbumDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
-  const handleCreateAlbum = () => {
+  const handleCreateAlbum = async () => {
     if (newAlbumTitle.trim()) {
-      onCreateAlbum(newAlbumTitle.trim(), newAlbumDescription.trim(), isPrivate);
-      setIsCreateDialogOpen(false);
-      resetForm();
+      setIsCreating(true);
+      try {
+        await onCreateAlbum(newAlbumTitle.trim(), newAlbumDescription.trim(), isPrivate);
+        resetForm();
+        setIsCreateDialogOpen(false);
+      } catch (error) {
+        console.error('Error creating album:', error);
+      } finally {
+        setIsCreating(false);
+      }
     }
   };
 
@@ -71,7 +79,7 @@ export function MyAlbumsHeader({
           <div className="flex flex-wrap gap-2">
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="gap-1 bg-photo-indigo hover:bg-photo-indigo/90">
+                <Button className="gap-1 bg-photo-indigo hover:bg-photo-indigo/90" data-dialog-trigger="create-album">
                   <Plus className="h-4 w-4 mr-1" />
                   Create Album
                 </Button>
@@ -120,9 +128,9 @@ export function MyAlbumsHeader({
                   <Button 
                     className="bg-photo-indigo hover:bg-photo-indigo/90"
                     onClick={handleCreateAlbum}
-                    disabled={!newAlbumTitle.trim()}
+                    disabled={!newAlbumTitle.trim() || isCreating}
                   >
-                    Create Album
+                    {isCreating ? 'Creating...' : 'Create Album'}
                   </Button>
                 </DialogFooter>
               </DialogContent>

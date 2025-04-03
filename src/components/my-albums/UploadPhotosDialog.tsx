@@ -10,30 +10,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { MyAlbum } from '@/data/my-albums';
 import { Upload, X, Image, Check } from 'lucide-react';
+import { useFileUpload, getImageAspectRatio, isImageFile } from '@/lib/upload';
+import { useMutation } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
+import { Id } from '@/convex/_generated/dataModel';
 
 interface UploadPhotosDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  album: MyAlbum | null;
+  albumId: Id<"albums"> | null;
   onUploadComplete: () => void;
 }
 
 export function UploadPhotosDialog({
   isOpen,
   onClose,
-  album,
+  albumId,
   onUploadComplete
 }: UploadPhotosDialogProps) {
+  const { user } = useAuth();
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   
+  // Convex mutations
+  const uploadMultiplePhotosMutation = useMutation(api.storage.uploadMultiplePhotos);
+  const { uploadFile } = useFileUpload();
+  
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      const newFiles = Array.from(event.target.files);
-      setFiles(prevFiles => [...prevFiles, ...newFiles]);
+      const selectedFiles = Array.from(event.target.files);
+      
+      // Filter out non-image files
+      const imageFiles = selectedFiles.filter(file => isImageFile(file));
+      
+      if (imageFiles.length !== selectedFiles.length) {
+        toast.warning(`${selectedFiles.length - imageFiles.length} non-image files were excluded.`);
+      }
+      
+      setFiles(prevFiles => [...prevFiles, ...imageFiles]);
     }
   };
   
@@ -42,41 +60,92 @@ export function UploadPhotosDialog({
   };
   
   const handleUpload = async () => {
-    if (files.length === 0) return;
+    if (files.length === 0 || !albumId || !user) return;
     
-    setUploading(true);
-    
-    // Simulate upload progress
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 5;
-      setUploadProgress(progress);
+    try {
+      setUploading(true);
       
-      if (progress >= 100) {
-        clearInterval(interval);
-        setTimeout(() => {
-          setUploading(false);
-          onUploadComplete();
-          handleClose();
-        }, 500);
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 5;
+        });
+      }, 300);
+      
+      // Prepare the photo data
+      const photoDataPromises = files.map(async (file) => {
+        try {
+          // Upload file to storage
+          const { storageId } = await uploadFile(file);
+          
+          // Get aspect ratio
+          const aspectRatio = await getImageAspectRatio(file);
+          
+          // Generate title from filename
+          const title = file.name.split('.')[0] || 'Untitled Photo';
+          
+          return {
+            title,
+            storageId,
+            aspectRatio,
+          };
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          return null;
+        }
+      });
+      
+      const photoData = (await Promise.all(photoDataPromises)).filter(Boolean);
+      
+      if (photoData.length === 0) {
+        throw new Error("All file uploads failed");
       }
-    }, 100);
+      
+      // Upload photos to the album
+      await uploadMultiplePhotosMutation({
+        albumId,
+        userId: user._id,
+        photos: photoData,
+      });
+      
+      // Complete progress
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      // Success notification
+      toast.success(`${photoData.length} photos uploaded successfully`);
+      
+      // Wait a moment before closing
+      setTimeout(() => {
+        onUploadComplete();
+        handleClose();
+      }, 1000);
+    } catch (error) {
+      console.error("Error uploading photos:", error);
+      toast.error("Failed to upload photos. Please try again.");
+      setUploading(false);
+      setUploadProgress(0);
+    }
   };
   
   const handleClose = () => {
-    setFiles([]);
-    setUploading(false);
-    setUploadProgress(0);
-    onClose();
+    if (!uploading) {
+      setFiles([]);
+      setUploading(false);
+      setUploadProgress(0);
+      onClose();
+    }
   };
-
-  if (!album) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[600px] bg-photo-primary border-photo-border text-photo-secondary">
         <DialogHeader>
-          <DialogTitle>Upload Photos to {album.title}</DialogTitle>
+          <DialogTitle>Upload Photos to Album</DialogTitle>
           <DialogDescription className="text-photo-secondary/70">
             Add new photos to your album. You can select multiple files at once.
           </DialogDescription>

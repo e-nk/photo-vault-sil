@@ -11,7 +11,7 @@ export const createAlbum = mutation({
     description: v.optional(v.string()),
     isPrivate: v.boolean(),
     userId: v.id("users"),
-    coverImage: v.optional(v.string()),
+    coverImage: v.optional(v.string()),  // Make coverImage optional
   },
   handler: async (ctx, args) => {
     // Verify the user exists
@@ -27,7 +27,7 @@ export const createAlbum = mutation({
       isPrivate: args.isPrivate,
       userId: args.userId,
       photoCount: 0,
-      coverImage: args.coverImage || null, // Default cover or placeholder
+      coverImage: args.coverImage,  // This can now be undefined
       dateCreated: new Date().toISOString(),
       dateUpdated: new Date().toISOString(),
       searchText: `${args.title} ${args.description || ''}`.toLowerCase(),
@@ -121,7 +121,14 @@ export const deleteAlbum = mutation({
 
     // Delete all photos in the album
     for (const photo of photos) {
-      // TODO: Delete photo files from storage
+      // Delete photo from storage
+      try {
+        await ctx.storage.delete(photo.storageId);
+      } catch (error) {
+        console.error("Error deleting photo from storage:", error);
+        // Continue with deletion even if storage deletion fails
+      }
+      
       await ctx.db.delete(photo._id);
     }
 
