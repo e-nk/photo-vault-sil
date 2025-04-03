@@ -21,7 +21,7 @@ export default function Container({
   return (
     <div className={`${widthClass} mx-auto px-4 sm:px-6 ${className}`}>
       {boxed ? (
-        <div className={`${noPadding ? '' : 'p-6 md:p-8 lg:p-10'} bg-secondary/10 rounded-xl shadow-lg border border-white/5 backdrop-blur-sm overflow-hidden`}>
+        <div className={`${noPadding ? '' : 'p-6 md:p-8 lg:p-10'} bg-photo-darkgray/20 rounded-xl shadow-lg border border-photo-border backdrop-blur-sm overflow-hidden`}>
           {children}
         </div>
       ) : (
