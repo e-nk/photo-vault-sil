@@ -5,35 +5,47 @@ import Container from '@/components/common/Container';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { UserSearch } from '@/components/home/UserSearch';
 import { UserGrid } from '@/components/home/UserGrid';
-import { dummyUsers } from '@/data/dummy-users';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
+import { useAuth } from '@/hooks/useAuth';
+import AuthCheck from '@/components/auth/AuthCheck';
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Filter users based on search term
-  const filteredUsers = dummyUsers.filter(user => 
-    user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Get all users
+  const usersResult = useQuery(api.users.getAllUsers, {
+    limit: 20,
+    searchTerm: searchTerm.length > 2 ? searchTerm : undefined,
+    requestingUserId: user ? user._id : undefined
+  });
 
   return (
-    <div className="min-h-screen bg-photo-primary pb-16">
-      {/* Page header */}
-      <HomeHeader />
+    <AuthCheck>
+      <div className="min-h-screen bg-photo-primary pb-16">
+        {/* Page header */}
+        <HomeHeader />
 
-      {/* Users section */}
-      <Container className="mt-8">
-        {/* Search */}
-        <UserSearch 
-          searchTerm={searchTerm} 
-          setSearchTerm={setSearchTerm} 
-          resultsCount={filteredUsers.length}
-        />
+        {/* Users section */}
+        <Container className="mt-8">
+          {/* Search */}
+          <UserSearch 
+            searchTerm={searchTerm} 
+            setSearchTerm={setSearchTerm} 
+            resultsCount={usersResult?.users?.length || 0}
+            isLoading={!usersResult}
+          />
 
-        {/* User grid */}
-        <UserGrid users={filteredUsers} searchTerm={searchTerm} />
-      </Container>
-    </div>
+          {/* User grid */}
+          <UserGrid 
+            users={usersResult?.users || []}
+            searchTerm={searchTerm}
+            isLoading={!usersResult}
+            currentUserId={user?._id}
+          />
+        </Container>
+      </div>
+    </AuthCheck>
   );
 }

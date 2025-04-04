@@ -2,18 +2,20 @@
 
 import React from 'react';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 
 interface UserSearchProps {
   searchTerm: string;
   setSearchTerm: (value: string) => void;
   resultsCount: number;
+  isLoading?: boolean;
 }
 
 export const UserSearch = ({ 
   searchTerm, 
   setSearchTerm,
-  resultsCount 
+  resultsCount,
+  isLoading = false
 }: UserSearchProps) => {
   return (
     <div className="mb-8">
@@ -28,8 +30,17 @@ export const UserSearch = ({
       </div>
 
       {/* Results count */}
-      <p className="text-photo-secondary/60 text-sm">
-        Showing {resultsCount} users
+      <p className="text-photo-secondary/60 text-sm flex items-center">
+        {isLoading ? (
+          <>
+            <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+            Searching users...
+          </>
+        ) : (
+          searchTerm && searchTerm.length > 0 ? 
+            `Found ${resultsCount} user${resultsCount !== 1 ? 's' : ''} matching "${searchTerm}"` :
+            `Showing ${resultsCount} user${resultsCount !== 1 ? 's' : ''}`
+        )}
       </p>
     </div>
   );

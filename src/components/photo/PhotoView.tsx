@@ -1,16 +1,21 @@
 "use client";
 
 import React from 'react';
-import { Photo } from '@/data/dummy-photos';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { Id } from '@/convex/_generated/dataModel';
 
 interface PhotoViewProps {
-  photo: Photo;
-  prevPhoto: Photo | null;
-  nextPhoto: Photo | null;
+  photo: {
+    _id: Id<"photos">;
+    title: string;
+    url: string;
+  } | null;
+  prevPhoto: { _id: Id<"photos"> } | null;
+  nextPhoto: { _id: Id<"photos"> } | null;
   onNavigatePrev: () => void;
   onNavigateNext: () => void;
+  isLoading?: boolean;
 }
 
 export function PhotoView({ 
@@ -18,8 +23,17 @@ export function PhotoView({
   prevPhoto, 
   nextPhoto, 
   onNavigatePrev, 
-  onNavigateNext 
+  onNavigateNext,
+  isLoading = false
 }: PhotoViewProps) {
+  if (isLoading || !photo) {
+    return (
+      <div className="flex-1 bg-black flex items-center justify-center">
+        <Loader2 className="h-10 w-10 text-white animate-spin opacity-50" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 bg-black flex items-center justify-center relative">
       {/* Previous/Next navigation for larger screens */}

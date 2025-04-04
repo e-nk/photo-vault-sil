@@ -790,3 +790,258 @@ export const getBookmarkedPhotos = query({
     };
   },
 });
+
+// Add these functions to the photos.ts file
+
+/**
+ * Get photos for exploration
+ */
+export const getExplorePhotos = query({
+  args: {
+    sortBy: v.optional(v.string()),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.id("photos")),
+    requestingUserId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 20;
+    let query = ctx.db.query("photos");
+
+    // Apply privacy filtering - only show photos from public albums
+    // unless requesting own photos
+    if (args.requestingUserId) {
+      query = query.filter((q) => {
+        return q.or(
+          // Show photos from public albums
+          q.eq(
+            // Get albums.isPrivate value via a join
+            q.field(
+              q.join(q.field("albumId"), 
+                ctx.db.query("albums")
+              ),
+              "isPrivate"
+            ),
+            false
+          ),
+          // Or show own photos
+          q.eq(q.field("userId"), args.requestingUserId)
+        );
+      });
+    } else {
+      // If no requesting user, only show photos from public albums
+      query = query.filter((q) => {
+        return q.eq(
+          q.field(
+            q.join(q.field("albumId"), 
+              ctx.db.query("albums")
+            ),
+            "isPrivate"
+          ),
+          false
+        );
+      });
+    }
+
+    // Apply sorting
+    if (args.sortBy) {
+      switch (args.sortBy) {
+        case 'newest':
+          query = query.order("desc", "dateUploaded");
+          break;
+        case 'oldest':
+          query = query.order("asc", "dateUploaded");
+          break;
+        case 'most-liked':
+          query = query.order("desc", "likes");
+          break;
+        case 'trending':
+          // For trending, we'll use a mix of recency and likes
+          // In a real app, you'd have a more sophisticated algorithm
+          query = query.order("desc", "likes");
+          break;
+        default:
+          query = query.order("desc", "dateUploaded");
+      }
+    } else {
+      // Default sort: most recent first
+      query = query.order("desc", "dateUploaded");
+    }
+
+    // Apply cursor if provided
+    if (args.cursor) {
+      query = query.withCursor(args.cursor);
+    }
+
+    const photos = await query.take(limit);
+
+    // If requesting user is provided, check which photos they've liked/bookmarked
+    let likedPhotoIds = new Set<string>();
+    let bookmarkedPhotoIds = new Set<string>();
+
+    if (args.requestingUserId) {
+      // Get likes
+      const likes = await ctx.db
+        .query("likes")
+        .withIndex("by_user_id", (q) => q.eq("userId", args.requestingUserId))
+        .collect();
+
+      likedPhotoIds = new Set(likes.map(like => like.photoId));
+
+      // Get bookmarks
+      const bookmarks = await ctx.db
+        .query("bookmarks")
+        .withIndex("by_user_id", (q) => q.eq("userId", args.requestingUserId))
+        .collect();
+
+      bookmarkedPhotoIds = new Set(bookmarks.map(bookmark => bookmark.photoId));
+    }
+
+    // Get user and album data for each photo
+    const photosWithData = await Promise.all(
+      photos.map(async (photo) => {
+        const album = await ctx.db.get(photo.albumId);
+        const user = await ctx.db.get(photo.userId);
+        
+        return {
+          ...photo,
+          isLiked: likedPhotoIds.has(photo._id),
+          isBookmarked: bookmarkedPhotoIds.has(photo._id),
+          user: user ? { 
+            _id: user._id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar 
+          } : null,
+          album: album ? {
+            _id: album._id,
+            title: album.title,
+            isPrivate: album.isPrivate
+          } : null
+        };
+      })
+    );
+
+    return {
+      photos: photosWithData,
+      nextCursor: photos.length === limit ? photos[photos.length - 1]._id : null,
+    };
+  },
+});
+
+/**
+ * Search for photos
+ */
+export const searchPhotos = query({
+  args: {
+    searchTerm: v.string(),
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.id("photos")),
+    requestingUserId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    if (!args.searchTerm || args.searchTerm.trim() === "") {
+      return { photos: [], nextCursor: null };
+    }
+
+    const limit = args.limit ?? 20;
+    let query = ctx.db
+      .query("photos")
+      .withSearchIndex("by_search", (q) => 
+        q.search("searchText", args.searchTerm.toLowerCase())
+      );
+
+    // Apply privacy filtering - only show photos from public albums
+    // unless requesting own photos
+    if (args.requestingUserId) {
+      query = query.filter((q) => {
+        return q.or(
+          // Show photos from public albums
+          q.eq(
+            // Get albums.isPrivate value via a join
+            q.field(
+              q.join(q.field("albumId"), 
+                ctx.db.query("albums")
+              ),
+              "isPrivate"
+            ),
+            false
+          ),
+          // Or show own photos
+          q.eq(q.field("userId"), args.requestingUserId)
+        );
+      });
+    } else {
+      // If no requesting user, only show photos from public albums
+      query = query.filter((q) => {
+        return q.eq(
+          q.field(
+            q.join(q.field("albumId"), 
+              ctx.db.query("albums")
+            ),
+            "isPrivate"
+          ),
+          false
+        );
+      });
+    }
+
+    // Apply cursor if provided
+    if (args.cursor) {
+      query = query.withCursor(args.cursor);
+    }
+
+    const photos = await query.take(limit);
+
+    // If requesting user is provided, check which photos they've liked/bookmarked
+    let likedPhotoIds = new Set<string>();
+    let bookmarkedPhotoIds = new Set<string>();
+
+    if (args.requestingUserId) {
+      // Get likes
+      const likes = await ctx.db
+        .query("likes")
+        .withIndex("by_user_id", (q) => q.eq("userId", args.requestingUserId))
+        .collect();
+
+      likedPhotoIds = new Set(likes.map(like => like.photoId));
+
+      // Get bookmarks
+      const bookmarks = await ctx.db
+        .query("bookmarks")
+        .withIndex("by_user_id", (q) => q.eq("userId", args.requestingUserId))
+        .collect();
+
+      bookmarkedPhotoIds = new Set(bookmarks.map(bookmark => bookmark.photoId));
+    }
+
+    // Get user and album data for each photo
+    const photosWithData = await Promise.all(
+      photos.map(async (photo) => {
+        const album = await ctx.db.get(photo.albumId);
+        const user = await ctx.db.get(photo.userId);
+        
+        return {
+          ...photo,
+          isLiked: likedPhotoIds.has(photo._id),
+          isBookmarked: bookmarkedPhotoIds.has(photo._id),
+          user: user ? { 
+            _id: user._id,
+            name: user.name,
+            username: user.username,
+            avatar: user.avatar 
+          } : null,
+          album: album ? {
+            _id: album._id,
+            title: album.title,
+            isPrivate: album.isPrivate
+          } : null
+        };
+      })
+    );
+
+    return {
+      photos: photosWithData,
+      nextCursor: photos.length === limit ? photos[photos.length - 1]._id : null,
+    };
+  },
+});

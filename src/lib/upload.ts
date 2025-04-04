@@ -1,5 +1,5 @@
-import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { useMutation } from 'convex/react';
 
 /**
  * Validates if a file is an image
@@ -31,46 +31,37 @@ export function getImageAspectRatio(file: File): Promise<number> {
  */
 export function useFileUpload() {
   const generateUploadUrl = useMutation(api.storage.generateUploadUrl);
-  const validateImage = useMutation(api.storage.validateImageFile);
   
   /**
    * Uploads a file to Convex storage
    */
   const uploadFile = async (file: File): Promise<{ storageId: string, url: string }> => {
     if (!file) {
-      throw new Error("No file provided");
+      return Promise.reject(new Error("No file provided"));
     }
     
-    // Validate the file
-    await validateImage({
-      filename: file.name,
-      fileSize: file.size,
-      mimeType: file.type,
-    });
-    
-    // Get upload URL
-    const uploadUrl = await generateUploadUrl();
-    
-    // Upload the file
-    const result = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: {
-        "Content-Type": file.type,
-      },
-      body: file,
-    });
-    
-    if (!result.ok) {
-      throw new Error(`Failed to upload file: ${result.statusText}`);
+    try {
+      // Get upload URL
+      const uploadUrl = await generateUploadUrl();
+      
+      if (!uploadUrl) {
+        return Promise.reject(new Error("Failed to generate upload URL"));
+      }
+      
+      // Extract the storage ID from the upload URL
+      const storageId = uploadUrl.split("/").pop() || "";
+      
+      if (!storageId) {
+        return Promise.reject(new Error("Failed to extract storage ID from URL"));
+      }
+      
+      return {
+        storageId,
+        url: uploadUrl,
+      };
+    } catch (error) {
+      return Promise.reject(error);
     }
-    
-    // Extract the storage ID from the upload URL
-    const storageId = uploadUrl.split("/").pop()!;
-    
-    return {
-      storageId,
-      url: uploadUrl,
-    };
   };
   
   /**
@@ -78,28 +69,26 @@ export function useFileUpload() {
    */
   const uploadMultipleFiles = async (files: File[]): Promise<Array<{ storageId: string, url: string, file: File }>> => {
     if (!files.length) {
-      throw new Error("No files provided");
+      return Promise.reject(new Error("No files provided"));
     }
     
-    const results = await Promise.allSettled(
-      files.map(file => uploadFile(file))
-    );
-    
-    // Filter successful uploads and combine with original files
-    const successfulUploads = results
-      .map((result, index) => {
-        if (result.status === 'fulfilled') {
-          return {
-            ...result.value,
-            file: files[index]
-          };
-        }
+    const uploadPromises = files.map(async (file) => {
+      try {
+        const result = await uploadFile(file);
+        return {
+          ...result,
+          file
+        };
+      } catch (error) {
         return null;
-      })
-      .filter(Boolean) as Array<{ storageId: string, url: string, file: File }>;
+      }
+    });
+    
+    const results = await Promise.all(uploadPromises);
+    const successfulUploads = results.filter(Boolean) as Array<{ storageId: string, url: string, file: File }>;
     
     if (successfulUploads.length === 0) {
-      throw new Error("All file uploads failed");
+      return Promise.reject(new Error("All file uploads failed"));
     }
     
     return successfulUploads;

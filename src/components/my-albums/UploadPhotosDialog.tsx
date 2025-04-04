@@ -10,8 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, X, Image, Check } from 'lucide-react';
-import { useFileUpload, getImageAspectRatio, isImageFile } from '@/lib/upload';
+import { Upload, X, Image, Check, Loader2 } from 'lucide-react';
+import { getImageAspectRatio, isImageFile } from '@/lib/upload';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useAuth } from '@/hooks/useAuth';
@@ -37,8 +37,8 @@ export function UploadPhotosDialog({
   const [uploadProgress, setUploadProgress] = useState(0);
   
   // Convex mutations
-  const uploadMultiplePhotosMutation = useMutation(api.storage.uploadMultiplePhotos);
-  const { uploadFile } = useFileUpload();
+  const getPresignedUploadUrl = useMutation(api.storage.getPresignedUploadUrl);
+  const addPhoto = useMutation(api.photos.addPhoto);
   
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -60,75 +60,154 @@ export function UploadPhotosDialog({
   };
   
   const handleUpload = async () => {
-    if (files.length === 0 || !albumId || !user) return;
+    if (files.length === 0 || !albumId || !user) {
+      toast.error("Please select files and try again");
+      return;
+    }
+    
+    setUploading(true);
+    let successCount = 0;
+    
+    // Progress tracking setup
+    const updateProgress = (current: number, total: number) => {
+      const percent = Math.floor((current / total) * 100);
+      setUploadProgress(Math.min(percent, 100));
+    };
+    
+    updateProgress(0, files.length);
     
     try {
-      setUploading(true);
-      
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 5;
-        });
-      }, 300);
-      
-      // Prepare the photo data
-      const photoDataPromises = files.map(async (file) => {
+      // Process each file sequentially
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        updateProgress(i, files.length);
+        
         try {
-          // Upload file to storage
-          const { storageId } = await uploadFile(file);
+          console.log(`Processing file ${i+1}/${files.length}: ${file.name}`);
           
-          // Get aspect ratio
+          // Step 1: Get a presigned URL with metadata
+          const { uploadUrl, sanitizedFilename } = await getPresignedUploadUrl({
+            filename: file.name,
+            fileSize: file.size,
+            mimeType: file.type,
+            userId: user._id
+          });
+          
+          console.log(`Got presigned URL: ${uploadUrl}`);
+          console.log(`Sanitized filename: ${sanitizedFilename}`);
+          
+          // Step 2: Try both POST and FormData approach for upload
+          let uploadSuccess = false;
+          
+          try {
+            // First try with FormData and POST
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const postResponse = await fetch(uploadUrl, {
+              method: "POST",
+              body: formData
+            });
+            
+            if (postResponse.ok) {
+              uploadSuccess = true;
+              console.log("Upload successful with POST and FormData");
+            } else {
+              console.log(`POST with FormData failed: ${postResponse.status} ${postResponse.statusText}`);
+            }
+          } catch (postError) {
+            console.error("POST with FormData error:", postError);
+          }
+          
+          // If first method failed, try direct POST
+          if (!uploadSuccess) {
+            try {
+              const directPostResponse = await fetch(uploadUrl, {
+                method: "POST",
+                body: file
+              });
+              
+              if (directPostResponse.ok) {
+                uploadSuccess = true;
+                console.log("Upload successful with direct POST");
+              } else {
+                console.log(`Direct POST failed: ${directPostResponse.status} ${directPostResponse.statusText}`);
+              }
+            } catch (directPostError) {
+              console.error("Direct POST error:", directPostError);
+            }
+          }
+          
+          // If both POST methods failed, try PUT
+          if (!uploadSuccess) {
+            try {
+              const putResponse = await fetch(uploadUrl, {
+                method: "PUT",
+                body: file
+              });
+              
+              if (putResponse.ok) {
+                uploadSuccess = true;
+                console.log("Upload successful with PUT");
+              } else {
+                console.log(`PUT failed: ${putResponse.status} ${putResponse.statusText}`);
+                throw new Error(`Upload failed: ${putResponse.status} ${putResponse.statusText}`);
+              }
+            } catch (putError) {
+              console.error("PUT error:", putError);
+              throw putError;
+            }
+          }
+          
+          if (!uploadSuccess) {
+            throw new Error("All upload methods failed");
+          }
+          
+          // Step 3: Calculate aspect ratio
           const aspectRatio = await getImageAspectRatio(file);
           
-          // Generate title from filename
-          const title = file.name.split('.')[0] || 'Untitled Photo';
+          // Step 4: Wait for the file to be processed
+          console.log("Waiting for file to be processed...");
+          await new Promise(resolve => setTimeout(resolve, 2000));
           
-          return {
-            title,
-            storageId,
-            aspectRatio,
-          };
+          // Step 5: Register the photo in the database
+          console.log("Registering photo in database...");
+          await addPhoto({
+            albumId,
+            userId: user._id,
+            title: file.name.split('.')[0] || 'Untitled Photo',
+            description: '',
+            url: uploadUrl,
+            thumbnailUrl: uploadUrl,
+            storageId: sanitizedFilename,
+            aspectRatio
+          });
+          
+          console.log(`Photo registered in database`);
+          successCount++;
         } catch (error) {
-          console.error(`Error processing file ${file.name}:`, error);
-          return null;
+          console.error(`Error uploading ${file.name}:`, error);
+          toast.error(`Failed to upload ${file.name}: ${error.message || 'Unknown error'}`);
         }
-      });
-      
-      const photoData = (await Promise.all(photoDataPromises)).filter(Boolean);
-      
-      if (photoData.length === 0) {
-        throw new Error("All file uploads failed");
       }
       
-      // Upload photos to the album
-      await uploadMultiplePhotosMutation({
-        albumId,
-        userId: user._id,
-        photos: photoData,
-      });
+      // Final progress update
+      updateProgress(files.length, files.length);
       
-      // Complete progress
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      
-      // Success notification
-      toast.success(`${photoData.length} photos uploaded successfully`);
-      
-      // Wait a moment before closing
-      setTimeout(() => {
-        onUploadComplete();
-        handleClose();
-      }, 1000);
+      if (successCount > 0) {
+        toast.success(`${successCount} photo${successCount !== 1 ? 's' : ''} uploaded successfully`);
+        setTimeout(() => {
+          onUploadComplete();
+          handleClose();
+        }, 1000);
+      } else {
+        toast.error("No photos were uploaded successfully");
+        setUploading(false);
+      }
     } catch (error) {
-      console.error("Error uploading photos:", error);
-      toast.error("Failed to upload photos. Please try again.");
+      console.error("Upload process error:", error);
+      toast.error("Upload process failed");
       setUploading(false);
-      setUploadProgress(0);
     }
   };
   
@@ -260,6 +339,21 @@ export function UploadPhotosDialog({
                 Upload {files.length > 0 ? `${files.length} Photo${files.length !== 1 ? 's' : ''}` : ''}
               </Button>
             </>
+          )}
+          
+          {uploading && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (confirm("Are you sure you want to cancel the upload?")) {
+                  setUploading(false);
+                }
+              }}
+              disabled={uploadProgress === 100}
+            >
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Cancel Upload
+            </Button>
           )}
           
           {uploading && uploadProgress === 100 && (

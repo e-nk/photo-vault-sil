@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Photo } from '@/data/dummy-photos';
 import { PhotoCard } from '@/components/shared/PhotoCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Grid, Rows, Columns, LayoutGrid, Search, SortDesc, Filter,
-  Check, Trash2, SquareSlash, Upload
+  Check, Trash2, SquareSlash, Upload, Loader2
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -24,9 +23,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Id } from '@/convex/_generated/dataModel';
+import { usePhotos } from '@/hooks/usePhotos';
+import { toast } from 'sonner';
 
 type GridLayout = 'masonry' | 'uniform' | 'rows' | 'columns';
 type SortOption = 'newest' | 'oldest' | 'most-liked' | 'title-az' | 'title-za';
+
+interface Photo {
+  _id: Id<"photos">;
+  title: string;
+  description?: string;
+  url: string;
+  thumbnailUrl: string;
+  aspectRatio: number;
+  likes: number;
+  comments: number;
+  dateUploaded: string;
+  albumId: Id<"albums">;
+  userId: Id<"users">;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
+}
 
 interface PhotoGridProps {
   photos: Photo[];
@@ -34,8 +52,8 @@ interface PhotoGridProps {
   isOwner?: boolean;
   searchTerm?: string;
   onSearchChange?: (term: string) => void;
-  onPhotoDelete?: (photoId: number) => void;
-  onMultiDelete?: (photoIds: number[]) => void;
+  onPhotoDelete?: (photoId: Id<"photos">) => void;
+  onMultiDelete?: (photoIds: Id<"photos">[]) => void;
   onUploadClick?: () => void;
   emptyMessage?: string;
   emptyActionLabel?: string;
@@ -53,12 +71,16 @@ export function PhotoGrid({
   emptyMessage = "No photos found",
   emptyActionLabel = "Upload Photos"
 }: PhotoGridProps) {
-  // Local state if not controlled externally
+  // Local state
   const [localSearchTerm, setLocalSearchTerm] = useState('');
   const [selectedLayout, setSelectedLayout] = useState<GridLayout>('masonry');
   const [sortOption, setSortOption] = useState<SortOption>('newest');
-  const [selectedPhotos, setSelectedPhotos] = useState<number[]>([]);
+  const [selectedPhotos, setSelectedPhotos] = useState<Id<"photos">[]>([]);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  
+  // Photo operations
+  const { deletePhoto } = usePhotos();
+  const [isDeleting, setIsDeleting] = useState(false);
   
   // Determine if we're using controlled or uncontrolled search
   const effectiveSearchTerm = onSearchChange ? searchTerm : localSearchTerm;
@@ -97,7 +119,7 @@ export function PhotoGrid({
     }
   });
   
-  const handleToggleSelect = (photoId: number) => {
+  const handleToggleSelect = (photoId: Id<"photos">) => {
     setSelectedPhotos(prev => 
       prev.includes(photoId)
         ? prev.filter(id => id !== photoId)
@@ -111,16 +133,50 @@ export function PhotoGrid({
       setSelectedPhotos([]);
     } else {
       // Otherwise, select all
-      setSelectedPhotos(filteredPhotos.map(photo => photo.id));
+      setSelectedPhotos(filteredPhotos.map(photo => photo._id));
     }
   };
   
-  const handleConfirmDelete = () => {
-    if (onMultiDelete && selectedPhotos.length > 0) {
-      onMultiDelete(selectedPhotos);
+  const handleConfirmDelete = async () => {
+    if (selectedPhotos.length === 0) return;
+
+    setIsDeleting(true);
+    
+    try {
+      // If custom handler provided, use it
+      if (onMultiDelete) {
+        await onMultiDelete(selectedPhotos);
+      } else {
+        // Otherwise delete photos one by one
+        for (const photoId of selectedPhotos) {
+          await deletePhoto(photoId);
+        }
+      }
+      
+      toast.success(`${selectedPhotos.length} photos deleted`, {
+        description: selectedPhotos.length === 1 
+          ? 'Photo has been removed' 
+          : 'Photos have been removed',
+      });
+      
       setSelectedPhotos([]);
+    } catch (error) {
+      console.error('Error deleting photos:', error);
+      toast.error('Failed to delete photos');
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
-    setIsDeleteDialogOpen(false);
+  };
+  
+  const handleDeleteSinglePhoto = async (photoId: Id<"photos">) => {
+    // If custom handler provided, use it
+    if (onPhotoDelete) {
+      await onPhotoDelete(photoId);
+    } else {
+      // Otherwise use the hook
+      await deletePhoto(photoId);
+    }
   };
   
   // Get grid class based on selected layout
@@ -144,14 +200,8 @@ export function PhotoGrid({
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {[...Array(8)].map((_, index) => (
-          <div 
-            key={index} 
-            className="bg-photo-darkgray/10 rounded-lg border border-photo-border/20 animate-pulse"
-            style={{ height: `${Math.floor(Math.random() * 100) + 200}px` }} 
-          />
-        ))}
+      <div className="flex justify-center items-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-photo-indigo" />
       </div>
     );
   }
@@ -192,15 +242,25 @@ export function PhotoGrid({
                 )}
               </Button>
               
-              {isOwner && onMultiDelete && (
+              {isOwner && (
                 <Button
                   variant="destructive"
                   size="sm"
                   className="gap-1"
                   onClick={() => setIsDeleteDialogOpen(true)}
+                  disabled={isDeleting}
                 >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Delete Selected ({selectedPhotos.length})
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete Selected ({selectedPhotos.length})
+                    </>
+                  )}
                 </Button>
               )}
               
@@ -325,21 +385,22 @@ export function PhotoGrid({
         <div className={getGridClass()}>
           {sortedPhotos.map((photo, index) => (
             <PhotoCard
-              key={photo.id}
+              key={photo._id}
               photo={photo}
               index={index}
               layout={selectedLayout}
               isOwner={isOwner}
               isSelectable={isOwner}
-              isSelected={selectedPhotos.includes(photo.id)}
-              onToggleSelect={() => handleToggleSelect(photo.id)}
+              isSelected={selectedPhotos.includes(photo._id)}
+              onToggleSelect={() => handleToggleSelect(photo._id)}
+              onDelete={isOwner ? () => handleDeleteSinglePhoto(photo._id) : undefined}
             />
           ))}
         </div>
       )}
       
       {/* Delete Confirmation Dialog */}
-      {isOwner && onMultiDelete && (
+      {isOwner && (
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <DialogContent className="sm:max-w-[425px] bg-photo-primary border-photo-border text-photo-secondary">
             <DialogHeader>
@@ -360,8 +421,14 @@ export function PhotoGrid({
               <Button 
                 variant="destructive"
                 onClick={handleConfirmDelete}
+                disabled={isDeleting}
               >
-                Delete Photos
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    Deleting...
+                  </>
+                ) : "Delete Photos"}
               </Button>
             </DialogFooter>
           </DialogContent>

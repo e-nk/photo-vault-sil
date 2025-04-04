@@ -15,7 +15,7 @@ export function AlbumCard({ album }: AlbumCardProps) {
   const formattedDate = formatDistanceToNow(new Date(album.dateCreated), { addSuffix: true });
   
   return (
-    <Link href={`/album/${album.id}`}>
+    <Link href={`/album/${album._id}`}>
       <Card className="overflow-hidden transition-all duration-300 hover:scale-[1.02] group bg-photo-darkgray/20 border-photo-border hover:shadow-lg hover:shadow-photo-indigo/5 hover:border-photo-border/50">
         <div className="aspect-[4/3] relative overflow-hidden w-full">
           <img 

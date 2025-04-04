@@ -86,6 +86,7 @@ export const getAllUsers = query({
     limit: v.optional(v.number()),
     cursor: v.optional(v.id("users")),
     searchTerm: v.optional(v.string()),
+    requestingUserId: v.optional(v.id("users")), // Added this parameter
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 10;
